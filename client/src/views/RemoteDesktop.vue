@@ -3,8 +3,13 @@
     <div class="controls">
       <button @click="startRemote" :disabled="isConnected">Connect</button>
       <button @click="stopRemote" :disabled="!isConnected">Disconnect</button>
+      <button @click="toggleClipboardSync" :class="{ active: clipboardEnabled }">
+        {{ clipboardEnabled ? 'Disable' : 'Enable' }} Clipboard Sync
+      </button>
     </div>
-    
+    <ScreenSettings />
+    <PerformanceMonitor />
+    <RecordingPlayer />
     <div class="screen-view" 
          @mousemove="handleMouseMove"
          @mousedown="handleMouseDown"
@@ -24,15 +29,41 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useSocketStore } from '../stores/socket';
+import { useClipboardStore } from '../stores/clipboard';
+import RecordingPlayer from '../components/RecordingPlayer.vue';
+import { useRecordingStore } from '../stores/recording';
+import PerformanceMonitor from '../components/PerformanceMonitor.vue';
+import { usePerformanceStore } from '../stores/performance';
 
 const socketStore = useSocketStore();
+const clipboardStore = useClipboardStore();
+const recordingStore = useRecordingStore();
+const performanceStore = usePerformanceStore();
 const command = ref('');
 
-const screenData = computed(() => socketStore.screenStream);
+const screenData = computed(() => {
+  const data = socketStore.screenStream;
+  if (data) {
+    // Calculate metrics
+    const imageSize = (data.length * 3) / 4; // Base64 to binary size
+    performanceStore.updateMetrics({
+      bandwidth: imageSize / 1024, // KB
+      fps: socketStore.stats.fps,
+      latency: socketStore.stats.latency
+    });
+  }
+  return data;
+});
+
 const commandOutput = computed(() => socketStore.commandOutput);
 const isConnected = computed(() => socketStore.connected);
+const clipboardEnabled = computed(() => clipboardStore.syncEnabled);
+
+onMounted(() => {
+  clipboardStore.initClipboardSync();
+});
 
 const startRemote = () => {
   socketStore.requestScreenShare();
@@ -60,6 +91,7 @@ const handleMouseMove = (event) => {
   const y = Math.round((event.clientY - rect.top) * scaleY);
   
   socketStore.sendMouseMove(x, y);
+  recordingStore.recordEvent('mouse-move', { x, y });
 };
 
 const handleMouseDown = (event) => {
@@ -69,6 +101,7 @@ const handleMouseDown = (event) => {
                 event.button === 1 ? 'middle' : 'left';
   
   socketStore.sendMouseClick(button, event.detail === 2);
+  recordingStore.recordEvent('mouse-click', { button, double: event.detail === 2 });
 };
 
 const handleMouseUp = () => {
@@ -94,6 +127,10 @@ const handleKeyDown = (event) => {
                   
   socketStore.sendKeyPress(key, modifier);
   event.preventDefault();
+};
+
+const toggleClipboardSync = () => {
+  clipboardStore.toggleSync();
 };
 </script>
 
@@ -132,5 +169,10 @@ const handleKeyDown = (event) => {
   padding: 10px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.active {
+  background-color: #42b983;
+  color: white;
 }
 </style>

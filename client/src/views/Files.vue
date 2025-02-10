@@ -21,12 +21,14 @@
       <button @click="createFolder">New Folder</button>
       <button @click="deleteSelected">Delete</button>
     </div>
+    <FileTransferProgress />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useFileStore } from '../stores/files';
+import FileTransferProgress from '../components/FileTransferProgress.vue';
 
 const fileStore = useFileStore();
 const currentPath = ref('C:/');
